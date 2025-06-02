@@ -1,0 +1,166 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "OpenWeatherMap One-Call 3.0 (Trimmed)",
+    "version": "1.0.0",
+    "description": "Minimal OpenAPI definition for retrieving “current” weather (temperature, humidity, wind)\nvia the One-Call 3.0 API. Expects an API key (query param `appid`)."
+  },
+  "servers": [
+    {
+      "url": "https://api.openweathermap.org/data/3.0"
+    }
+  ],
+  "paths": {
+    "/onecall": {
+      "get": {
+        "summary": "One-Call 3.0 “current” weather",
+        "operationId": "getOneCallCurrent",
+        "description": "Retrieves current weather conditions (temp, humidity, wind, etc.) for the specified lat/lon.\nRequires `lat`, `lon`, and `appid` as query parameters.",
+        "parameters": [
+          {
+            "name": "lat",
+            "in": "query",
+            "description": "Latitude of the location (e.g., 38.8048)",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "float",
+              "example": 38.8048
+            }
+          },
+          {
+            "name": "lon",
+            "in": "query",
+            "description": "Longitude of the location (e.g., -77.0469)",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "float",
+              "example": -77.0469
+            }
+          },
+          {
+            "name": "units",
+            "in": "query",
+            "description": "Units of measurement. For Imperial (°F, mph), use `units=imperial`.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "standard",
+                "metric",
+                "imperial"
+              ],
+              "default": "imperial"
+            }
+          },
+          {
+            "name": "appid",
+            "in": "query",
+            "description": "Your OpenWeatherMap API key (pass as a query param).",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful current‐weather response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "lat": {
+                      "type": "number",
+                      "description": "Latitude of returned location"
+                    },
+                    "lon": {
+                      "type": "number",
+                      "description": "Longitude"
+                    },
+                    "timezone": {
+                      "type": "string"
+                    },
+                    "current": {
+                      "type": "object",
+                      "properties": {
+                        "dt": {
+                          "type": "integer",
+                          "description": "Unix timestamp"
+                        },
+                        "temp": {
+                          "type": "number",
+                          "description": "Current temperature (°F if units=imperial)"
+                        },
+                        "humidity": {
+                          "type": "integer",
+                          "description": "Relative humidity (%)"
+                        },
+                        "wind_speed": {
+                          "type": "number",
+                          "description": "Wind speed (mph if units=imperial)"
+                        },
+                        "wind_deg": {
+                          "type": "integer",
+                          "description": "Wind direction (degrees)"
+                        }
+                      }
+                    }
+                  },
+                  "example": {
+                    "lat": 38.8048,
+                    "lon": -77.0469,
+                    "timezone": "America/New_York",
+                    "current": {
+                      "dt": 1696272000,
+                      "temp": 95.2,
+                      "humidity": 12,
+                      "wind_speed": 18,
+                      "wind_deg": 220
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "responses": {
+      "400": {
+        "description": "Bad Request – missing or invalid parameter"
+      },
+      "401": {
+        "description": "Unauthorized – invalid API key"
+      },
+      "500": {
+        "description": "Internal Server Error – unexpected error at OWM"
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyQuery": {
+        "type": "apiKey",
+        "in": "query",
+        "name": "appid"
+      }
+    }
+  },
+  "security": [
+    {
+      "ApiKeyQuery": []
+    }
+  ]
+}

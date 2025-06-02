@@ -1,0 +1,3 @@
+send_drone_mission
+
+Dispatches a drone to the specified latitude/longitude to capture aerial imagery of the target area. Returns a mission_id and mission status.

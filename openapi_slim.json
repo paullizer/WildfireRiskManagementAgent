@@ -1,0 +1,159 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Drone API",
+    "version": "1.0.0",
+    "description": "API for submitting drone missions"
+  },
+  "servers": [
+    {
+      "url": "https://rb-droneapi.azurewebsites.net"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-api-key"
+      }
+    },
+    "schemas": {
+      "Waypoint": {
+        "type": "object",
+        "properties": {
+          "lat": {
+            "type": "number",
+            "format": "double",
+            "description": "Latitude of the waypoint in decimal degrees"
+          },
+          "lon": {
+            "type": "number",
+            "format": "double",
+            "description": "Longitude of the waypoint in decimal degrees"
+          }
+        },
+        "required": [
+          "lat",
+          "lon"
+        ]
+      },
+      "MissionRequest": {
+        "type": "object",
+        "properties": {
+          "waypoints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Waypoint"
+            },
+            "description": "List of waypoints (lat/lon) for the mission"
+          },
+          "altitude": {
+            "type": "number",
+            "format": "double",
+            "description": "Target altitude for the mission (in meters)"
+          },
+          "speed": {
+            "type": "number",
+            "format": "double",
+            "description": "Travel speed for the drone (in meters per second)"
+          }
+        },
+        "required": [
+          "waypoints",
+          "altitude",
+          "speed"
+        ]
+      },
+      "MissionResponse": {
+        "type": "object",
+        "properties": {
+          "mission_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier assigned to the submitted mission"
+          },
+          "status": {
+            "type": "string",
+            "description": "Current status of the mission (e.g., \"scheduled\")"
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp (UTC) when the mission was submitted"
+          }
+        },
+        "required": [
+          "mission_id",
+          "status",
+          "submitted_at"
+        ]
+      }
+    }
+  },
+  "paths": {
+    "/drone/submit_mission": {
+      "post": {
+        "summary": "Submit a drone mission",
+        "operationId": "submit_mission",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MissionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Mission submitted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MissionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request – invalid payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized – missing or invalid API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,3 @@
+get_current_weather
+
+Given a location, returns current temperature (°F), relative humidity (%), and wind speed (mph). Useful for computing a weather-based fire‐risk index (e.g. Low / Moderate / High / Very High).
