@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}Home – FireChat{% endblock %}
+
+{% block content %}
+  <div class="text-center mt-5">
+    <h1 class="display-4">Welcome to FireChat</h1>
+    <p class="lead">
+      Ask about the fire risk anywhere in the world. FireChat combines real-time weather,
+      web-search alerts, satellite imagery, and even drone dispatch.
+    </p>
+    <a href="{{ url_for('chat_page') }}" class="btn btn-primary btn-lg mt-3">
+      Start Chatting →
+    </a>
+  </div>
+{% endblock %}

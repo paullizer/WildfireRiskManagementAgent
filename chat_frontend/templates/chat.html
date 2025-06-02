@@ -1,0 +1,69 @@
+{% extends 'base.html' %}
+
+{% block title %}Fire Risk Chat Interface{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Fire Risk Chat</h2>
+    <div id="chat-window" class="border rounded p-3 mb-3" style="height: 400px; overflow-y: auto;">
+        <!-- Chat bubbles go here -->
+    </div>
+
+    <form id="chat-form">
+        <div class="input-group mb-3">
+            <input type="text" id="user-input" class="form-control" placeholder="Ask: What is the fire risk in Alexandria, VA?" required>
+            <button class="btn btn-success" type="submit">Send</button>
+        </div>
+    </form>
+</div>
+
+<script>
+    const chatWindow = document.getElementById("chat-window");
+    const chatForm   = document.getElementById("chat-form");
+    const userInput  = document.getElementById("user-input");
+
+    function appendMessage(sender, text) {
+        const msgDiv = document.createElement("div");
+        msgDiv.classList.add("mb-2", "px-3", "py-2", "rounded");
+        if (sender === "user") {
+            msgDiv.classList.add("bg-primary", "text-white", "text-end");
+            msgDiv.innerHTML = `<small>You:</small><br>${text}`;
+        } else {
+            msgDiv.classList.add("bg-light", "text-dark", "text-start");
+            msgDiv.innerHTML = `<small>Agent:</small><br>${text.replace(/\n/g, "<br>")}`;
+        }
+        chatWindow.appendChild(msgDiv);
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+    }
+
+    chatForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const question = userInput.value.trim();
+        if (!question) return;
+        appendMessage("user", question);
+        userInput.value = "";
+
+        // Show a “typing” indicator
+        appendMessage("agent", "<em>…thinking…</em>");
+
+        try {
+            const resp = await fetch("/api/ask", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ question }),
+            });
+            const data = await resp.json();
+            // Remove the “…thinking…” bubble
+            chatWindow.lastChild.remove();
+            if (data.error) {
+                appendMessage("agent", `<span class="text-danger">${data.error}</span>`);
+            } else {
+                appendMessage("agent", data.answer);
+            }
+        } catch (err) {
+            chatWindow.lastChild.remove();
+            appendMessage("agent", `<span class="text-danger">Error: ${err.message}</span>`);
+        }
+    });
+</script>
+{% endblock %}
