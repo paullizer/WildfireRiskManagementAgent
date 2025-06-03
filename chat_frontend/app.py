@@ -1,20 +1,23 @@
 import os
 import json
 import requests
+import asyncio
 from flask import Flask, render_template, request, jsonify
 
 # === SEMANTIC KERNEL IMPORTS ===
 from semantic_kernel import Kernel
-from semantic_kernel.skill_definition import OpenApiSkill
 from semantic_kernel.connectors.ai.azure_openai import AzureOpenAIClient
 from semantic_kernel.core_skills import HttpSkill
 
-from dotenv import load_dotenv
+# The new OpenAPI plugin builder and its execution parameters:
+from semantic_kernel.connectors.ai.open_api import (
+    OpenAPIFunctionExecutionParameters
+)
 
 # ==============================================================================
 # CONFIGURATION
 # ==============================================================================
-load_dotenv()
+# Load environment variables before anything else
 
 # --- Azure OpenAI settings ---
 AZURE_OPENAI_ENDPOINT   = os.getenv("AZURE_OPENAI_ENDPOINT")
@@ -27,22 +30,23 @@ SENTINEL_CLIENT_ID     = os.getenv("SENTINEL_CLIENT_ID")
 SENTINEL_CLIENT_SECRET = os.getenv("SENTINEL_CLIENT_SECRET")
 DRONE_API_KEY          = os.getenv("DRONE_API_KEY")
 
-# --- Azure AI Foundry search‐agent settings ---
-FOUNDRY_ENDPOINT         = os.getenv("FOUNDRY_ENDPOINT")
-FOUNDRY_PROJECT_ID       = os.getenv("FOUNDRY_PROJECT_ID")
-FOUNDRY_SEARCH_AGENT_ID  = os.getenv("FOUNDRY_SEARCH_AGENT_ID")
-FOUNDRY_API_KEY          = os.getenv("FOUNDRY_API_KEY")
+# --- Azure AI Foundry search-agent settings ---
+FOUNDRY_ENDPOINT        = os.getenv("FOUNDRY_ENDPOINT")
+FOUNDRY_PROJECT_ID      = os.getenv("FOUNDRY_PROJECT_ID")
+FOUNDRY_SEARCH_AGENT_ID = os.getenv("FOUNDRY_SEARCH_AGENT_ID")
+FOUNDRY_API_KEY         = os.getenv("FOUNDRY_API_KEY")
 
 # ==============================================================================
 # FLASK APP
 # ==============================================================================
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET", "change‐me")
+app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET", "change-me")
+
+VERSION = "1.2.0"  # Bumped now that we’ve switched to add_plugin_from_openapi
 
 # ==============================================================================
 # SEMANTIC KERNEL SETUP (using Azure OpenAI)
 # ==============================================================================
-# 1) Create and configure an AzureOpenAIClient
 if not (AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY and AZURE_OPENAI_DEPLOYMENT):
     raise RuntimeError(
         "Please set AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, and AZURE_OPENAI_DEPLOYMENT."
@@ -55,48 +59,15 @@ ai_client = AzureOpenAIClient(
 )
 kernel = Kernel(ai_client)
 
-# 2) Register HttpSkill (for any low‐level HTTP calls, e.g., Sentinel token)
+# Register HttpSkill (for low-level HTTP calls, e.g. fetching Sentinel token)
 kernel.import_skill(HttpSkill(kernel), "http")
 
 # ==============================================================================
-# 1) OPENWEATHER: “get_current_weather” skill registration
-# ==============================================================================
-with open("openapi/openapi-openweathermap.json", "r") as f:
-    openweather_openapi = json.load(f)
-
-kernel.import_skill(
-    OpenApiSkill(
-        kernel,
-        openweather_openapi,
-        default_operation_id="getOneCallCurrent",
-        # This tells the SDK to append "?appid=<OWM_API_KEY>" to every call
-        auth_setting={"appid": OWM_API_KEY}
-    ),
-    skill_name="OpenWeather"
-)
-
-# ==============================================================================
-# 2) DRONE: “send_drone_mission” skill registration
-# ==============================================================================
-with open("openapi/openapi-drone.json", "r") as f:
-    drone_openapi = json.load(f)
-
-kernel.import_skill(
-    OpenApiSkill(
-        kernel,
-        drone_openapi,
-        default_operation_id="sendDroneMission",
-        auth_setting={"Authorization": f"Bearer {DRONE_API_KEY}"}
-    ),
-    skill_name="Drone"
-)
-
-# ==============================================================================
-# 3) SENTINEL: OAuth2 + dynamic “process” skill registration
+# UTILITY: Fetch Sentinel OAuth2 token
 # ==============================================================================
 def get_sentinel_token() -> str:
     """
-    Perform the client_credentials OAuth call to Sentinel Hub and return the access token.
+    Perform client_credentials OAuth call to Sentinel Hub and return the access token.
     """
     token_url = (
         "https://services.sentinel-hub.com/"
@@ -115,30 +86,58 @@ def get_sentinel_token() -> str:
         raise RuntimeError("Failed to obtain Sentinel Hub access_token")
     return token
 
-with open("openapi/openapi-sentinel.json", "r") as f:
-    sentinel_openapi = json.load(f)
-
-def import_sentinel_skill():
+# ==============================================================================
+# 1) REGISTER OPENAPI PLUGINS ASYNCHRONOUSLY
+#    (OpenWeather, Drone, Sentinel)
+# ==============================================================================
+async def register_openapi_plugins():
     """
-    Fetch a fresh OAuth2 token and (re)register the Sentinel “process” skill
-    with that Authorization: Bearer <token> header.
+    Instead of manually instantiating OpenApiSkill(...), we now call:
+       await kernel.add_plugin_from_openapi(...)
+    for each of our APIs.
     """
-    token = get_sentinel_token()
-    kernel.import_skill(
-        OpenApiSkill(
-            kernel,
-            sentinel_openapi,
-            default_operation_id="process",
-            auth_setting={"Authorization": f"Bearer {token}"}
+    # ---- 1a) OpenWeatherMap: “get_current_weather” ----
+    # We have a local file at openapi/openapi-openweathermap.json
+    # The OWM spec expects ?appid=<api_key> as a query parameter,
+    # so we pass that in the execution_settings.auth_setting.
+    await kernel.add_plugin_from_openapi(
+        plugin_name="OpenWeather",
+        openapi_document_path="openapi/openapi-openweathermap.json",
+        execution_settings=OpenAPIFunctionExecutionParameters(
+            # This makes sure OWM’s query param "appid" is supplied automatically
+            auth_setting={"appid": OWM_API_KEY},
+            enable_payload_namespacing=True  # optional but recommended
         ),
-        skill_name="Sentinel"
     )
 
-# Register Sentinel skill at startup
-import_sentinel_skill()
+    # ---- 1b) Drone Dispatch: “send_drone_mission” ----
+    # Local file: openapi/openapi-drone.json. We need to pass Bearer <DRONE_API_KEY>
+    await kernel.add_plugin_from_openapi(
+        plugin_name="Drone",
+        openapi_document_path="openapi/openapi-drone.json",
+        execution_settings=OpenAPIFunctionExecutionParameters(
+            auth_setting={"Authorization": f"Bearer {DRONE_API_KEY}"},
+            enable_payload_namespacing=True
+        ),
+    )
+
+    # ---- 1c) Sentinel Hub: “process” ----
+    # We cannot register Sentinel until we fetch a fresh OAuth2 token.
+    token = get_sentinel_token()
+    await kernel.add_plugin_from_openapi(
+        plugin_name="Sentinel",
+        openapi_document_path="openapi/openapi-sentinel.json",
+        execution_settings=OpenAPIFunctionExecutionParameters(
+            auth_setting={"Authorization": f"Bearer {token}"},
+            enable_payload_namespacing=True
+        ),
+    )
+
+# Run the registration step before Flask starts
+asyncio.run(register_openapi_plugins())
 
 # ==============================================================================
-# 4) AZURE AI FOUNDRY: “Internet Fire Search Agent” registration
+# 2) AZURE AI FOUNDRY: “Internet Fire Search Agent” registration
 # ==============================================================================
 def search_foundry_agent(query_text: str) -> str:
     """
@@ -165,7 +164,7 @@ def search_foundry_agent(query_text: str) -> str:
         return f"Foundry Search Agent error ({resp.status_code}): {resp.text}"
 
     data = resp.json()
-    # Foundry returns {"answer": "<agent’s reply>", …}
+    # Foundry’s response format: { "answer": "<agent’s reply>", … }
     return data.get("answer", "<no answer returned>")
 
 # Register it as a semantic function under the name “search_web”
@@ -180,7 +179,7 @@ kernel.register_semantic_function(
 # ==============================================================================
 base_dir = os.path.dirname(__file__)
 
-# 1) Weather Analysis Agent
+# 3a) Weather Analysis Agent
 weather_path = os.path.join(base_dir, "prompts/Weather Analysis Agent.md")
 with open(weather_path, "r", encoding="utf-8") as f:
     weather_plan = f.read()
@@ -191,7 +190,7 @@ weather_function = kernel.create_semantic_function(
     description="Retrieves current weather and computes a weather-based fire risk."
 )
 
-# 2) Internet Search Agent (orchestrated by Foundry)
+# 3b) Internet Search Agent (delegates to Foundry)
 search_path = os.path.join(base_dir, "prompts/Internet Search Agent.md")
 with open(search_path, "r", encoding="utf-8") as f:
     search_plan = f.read()
@@ -202,7 +201,7 @@ search_function = kernel.create_semantic_function(
     description="Queries the Azure AI Foundry Internet Fire Search Agent."
 )
 
-# 3) Drone Dispatch Agent
+# 3c) Drone Dispatch Agent
 drone_path = os.path.join(base_dir, "prompts/Drone Dispatch Agent.md")
 with open(drone_path, "r", encoding="utf-8") as f:
     drone_plan = f.read()
@@ -213,13 +212,13 @@ drone_function = kernel.create_semantic_function(
     description="Dispatches a drone when fire risk is high."
 )
 
-# 4) Wildfire Management Agent (orchestrator)
+# 3d) Wildfire Management Agent (orchestrator)
 wildfire_path = os.path.join(base_dir, "prompts/Wildfire Management Agent.md")
 with open(wildfire_path, "r", encoding="utf-8") as f:
-    wildfire_plan = f.read()
+    wildcard_plan = f.read()
 
 wildfire_function = kernel.create_semantic_function(
-    wildfire_plan,
+    wildcard_plan,
     name="WildfireAgent",
     description=(
         "Orchestrates WeatherAgent, SearchAgent, and DroneAgent to produce "
@@ -232,12 +231,12 @@ wildfire_function = kernel.create_semantic_function(
 # ==============================================================================
 @app.route("/", methods=["GET"])
 def index():
-    return render_template("index.html")
+    return render_template("index.html", version=VERSION)
 
 
 @app.route("/chat", methods=["GET"])
 def chat_page():
-    return render_template("chat.html")
+    return render_template("chat.html", version=VERSION)
 
 
 @app.route("/api/ask", methods=["POST"])
@@ -252,14 +251,23 @@ def ask_agent():
     if not question:
         return jsonify({"error": "No question provided."}), 400
 
-    # Refresh the Sentinel token so any downstream calls to Sentinel use a valid Bearer token
-    import_sentinel_skill()
+    # Each time, re-import Sentinel (in case the token expired)
+    token = get_sentinel_token()
+    # Re-register the “Sentinel” plugin with the new token
+    asyncio.run(
+        kernel.add_plugin_from_openapi(
+            plugin_name="Sentinel",
+            openapi_document_path="openapi/openapi-sentinel.json",
+            execution_settings=OpenAPIFunctionExecutionParameters(
+                auth_setting={"Authorization": f"Bearer {token}"},
+                enable_payload_namespacing=True
+            )
+        )
+    )
 
-    # Invoke the Wildfire Management Agent (which itself will call WeatherAgent, SearchAgent, DroneAgent)
+    # Invoke the Wildfire Management Agent
     result = wildfire_function.invoke(question)
-    report = result  # The orchestrator’s final report (string)
-
-    return jsonify({"answer": report})
+    return jsonify({"answer": result})
 
 
 # ==============================================================================
