@@ -1,0 +1,3 @@
+internet_search
+
+This agent performs real-time internet searches to detect recent reports of active fires near a specified location. It constructs a search query using the location and current year, then analyzes the returned snippets and titles for credible mentions of wildfires or active fire events. If found, it flags the presence of reported fires and includes supporting source excerpts. This helps validate ground-level fire risks using publicly available news and web data.

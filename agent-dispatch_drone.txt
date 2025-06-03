@@ -1,0 +1,3 @@
+dispatch_drone_agent
+
+This agent dispatches aerial drones to locations with elevated fire risk. When provided with coordinates and a fire risk level, it evaluates whether the risk warrants action. If the fire risk is “High”, “Very High”, or “High (Reported Fire)”, it triggers a drone mission using the send_drone_mission tool. The agent returns the mission ID and status if dispatched, or a clear reason if the risk is insufficient. It supports rapid response and situational awareness.

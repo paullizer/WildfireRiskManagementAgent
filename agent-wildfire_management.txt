@@ -1,0 +1,3 @@
+wildfire_management_agent
+
+This Wildfire Management Agent coordinates three specialized sub-agents to assess and respond to fire risks. It retrieves real-time weather data, checks online for active fire reports, and dispatches a drone if risk levels warrant. By combining environmental data and live reports, it determines a final fire risk classification. If conditions are dangerous, it automatically initiates aerial surveillance, providing a full situational report including weather, online sources, risk level, and drone deployment status.

@@ -627,8 +627,8 @@
     "securitySchemes": {
       "ApiKeyQuery": {
         "type": "apiKey",
-        "in": "query",
-        "name": "appid"
+        "in": "header",
+        "name": "x-api-key"
       }
     }
   },

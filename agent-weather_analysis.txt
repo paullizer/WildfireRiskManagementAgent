@@ -1,0 +1,3 @@
+weather_analysis_agent
+
+This agent analyzes fire risk by retrieving real-time weather data (temperature, humidity, wind speed) for a specific location using the get_current_weather tool. It applies a rule-based model to determine fire risk levels: Low, Moderate, High, or Very High. The output includes raw weather values and a computed fire-risk classification, enabling fast, localized risk assessment to support emergency planning, surveillance, or decision-making workflows.
